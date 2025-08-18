@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dev Home — Minimal Glass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#040162;
+    --bg2:#000000;
+    --text:#e8edff;
+    --muted:#aeb8ffcc;
+    --accent:#5b7cfa;
+    --glass-color:#ffffff;     /* base color before alpha */
+    --glass-alpha:0.09;        /* transparency */
+    --glass-blur:14px;         /* blur radius */
+    --glass-border:rgba(255,255,255,.18);
+    --shadow:0 8px 30px rgba(0,0,0,.35);
+    --shortcut-size:92px;      /* adjustable in settings */
+    --radius:18px;
+    --tile-radius:16px;
+    --focus:#69f0ff;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    background: radial-gradient(1200px 800px at 20% 10%, rgba(64,64,255,.14), transparent 60%),
+                radial-gradient(1200px 800px at 90% 80%, rgba(64,64,255,.08), transparent 60%),
+                linear-gradient(120deg, var(--bg1), var(--bg2) 55%);
+    overflow:hidden; /* canvas effects live behind content */
+  }
+
+  /* Background image layer (user provided) */
+  #bg-image{
+    position:fixed; inset:0; z-index:-3;
+    background-position:center; background-size:cover; background-repeat:no-repeat;
+    opacity:.22; pointer-events:none; filter: saturate(1.05) contrast(1.1);
+  }
+
+  /* Animation canvases */
+  #codeRain, #neonLayer{
+    position:fixed; inset:0; z-index:-2; pointer-events:none;
+  }
+  #neonLayer{ overflow:hidden }
+  .neon-line{
+    position:absolute; height:2px; width:22%;
+    background: linear-gradient(90deg, transparent 0%, rgba(80,180,255,.0) 5%,
+                rgba(80,180,255,.85) 50%, rgba(80,180,255,.0) 95%, transparent 100%);
+    filter: drop-shadow(0 0 8px rgba(80,180,255,.8)) drop-shadow(0 0 18px rgba(80,180,255,.7));
+    animation: neon-move 5.6s linear infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes neon-move{
+    0%{ transform: translateX(-30vw); opacity:.0 }
+    5%{opacity:1}
+    95%{opacity:1}
+    100%{ transform: translateX(130vw); opacity:0 }
+  }
+
+  /* Layout */
+  .wrap{
+    position:relative;
+    min-height:100dvh;
+    display:flex; flex-direction:column;
+  }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 24px; gap:16px;
+  }
+
+  .logo{
+    display:flex; align-items:center; gap:12px;
+    font-weight:800; letter-spacing:.8px;
+    padding:10px 14px; border-radius:12px;
+    user-select:none;
+  }
+  .logo .mark{
+    width:28px; height:28px; border-radius:8px;
+    background:linear-gradient(135deg,#5b7cfa,#974dff);
+    box-shadow:0 4px 18px rgba(91,124,250,.45), inset 0 0 10px rgba(255,255,255,.15);
+  }
+  .muted{ color:var(--muted) }
+
+  .top-actions{
+    display:flex; align-items:center; gap:10px;
+  }
+  .icon-btn{
+    height:42px; width:42px; display:grid; place-items:center;
+    border-radius:14px; border:1px solid var(--glass-border);
+    background: rgba(255,255,255,var(--glass-alpha));
+    backdrop-filter: blur(var(--glass-blur));
+    color:var(--text);
+    cursor:pointer; box-shadow:var(--shadow);
+    transition: transform .15s ease, background .2s ease, box-shadow .2s ease;
+  }
+  .icon-btn:hover{ transform: translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,.45) }
+  .icon-btn:active{ transform: translateY(0) scale(.98) }
+
+  /* Search */
+  .center{
+    flex:1;
+    display:grid; place-items:center;
+    padding:12px 20px 0 20px;
+  }
+
+  .search-wrap{
+    width:min(920px, 92vw);
+    display:flex; align-items:center; gap:10px;
+    padding:10px;
+    border-radius:999px;
+    border:1px solid var(--glass-border);
+    background: rgba(255,255,255,var(--glass-alpha));
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--shadow);
+    position:relative;
+  }
+  .search-wrap i{ color:#c9d2ffcc }
+  #searchInput{
+    flex:1; height:48px;
+    border:none; outline:none;
+    background:transparent; color:var(--text);
+    font-size:18px; padding:0 2px;
+  }
+  .mic-btn{ width:42px; height:42px; border-radius:50%; }
+  .kbd-hint{ position:absolute; right:60px; bottom:10px; font-size:12px; color:#cbd2ff70 }
+
+  /* Shortcuts grid */
+  .shortcuts{
+    width:min(1060px, 94vw);
+    margin:28px auto 0; padding-bottom:36px;
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(var(--shortcut-size),1fr));
+    gap:18px; justify-items:center;
+  }
+
+  .tile{
+    width:calc(var(--shortcut-size));
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    padding:14px 10px 12px;
+    border-radius:var(--tile-radius);
+    border:1px solid var(--glass-border);
+    background: rgba(255,255,255,var(--glass-alpha));
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--shadow);
+    text-decoration:none; color:var(--text);
+    transition: transform .15s ease, box-shadow .25s ease, background .25s ease;
+    cursor:pointer; user-select:none;
+    position:relative; overflow:hidden;
+  }
+  .tile:hover{ transform: translateY(-4px); box-shadow:0 16px 36px rgba(0,0,0,.5) }
+  .tile:active{ transform: translateY(-2px) scale(.99) }
+  .tile .icon{
+    height:44px; width:44px; border-radius:12px; display:grid; place-items:center;
+    background:linear-gradient(135deg, rgba(91,124,250,.2), rgba(151,77,255,.18));
+    color:#fff; font-size:22px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.15)
+  }
+  .tile img{ width:100%; height:100%; object-fit:cover }
+  .tile .label{ font-size:13px; color:#dfe6ff; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100% }
+  .tile.add{ border-style:dashed; filter:saturate(1.1) }
+  .tile .ripple{
+    position:absolute; border-radius:999px; pointer-events:none;
+    transform:translate(-50%,-50%); background: radial-gradient(circle, rgba(105,240,255,.25), transparent 60%);
+    width:0; height:0; animation:ripple .6s ease-out forwards;
+  }
+  @keyframes ripple{ to{ width:380px; height:380px; opacity:0 } }
+
+  /* Corners */
+  .corner{
+    position:fixed; bottom:26px; z-index:10;
+    border-radius:16px; padding:12px 16px; min-width:130px;
+    border:1px solid var(--glass-border);
+    background: rgba(255,255,255,var(--glass-alpha));
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    color:var(--text); cursor:pointer; text-decoration:none;
+  }
+  #btnWidgets{ left:26px }
+  #btnCollections{ right:26px }
+  .corner:hover{ transform: translateY(-2px) }
+  .corner:active{ transform: translateY(0) scale(.98) }
+
+  /* Panels (Settings / Widgets / Collections / Modal) */
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.3);
+    display:none; align-items:center; justify-content:center; z-index:20;
+  }
+  .overlay.show{ display:flex }
+
+  .panel{
+    width:min(980px, 96vw); max-height:86vh; overflow:auto;
+    border-radius:20px; padding:18px;
+    border:1px solid var(--glass-border);
+    background: rgba(20,20,40, calc(var(--glass-alpha) + .06));
+    backdrop-filter: blur(calc(var(--glass-blur) + 4px));
+    box-shadow: 0 30px 60px rgba(0,0,0,.6);
+  }
+
+  .panel header{
+    padding:6px 2px 12px 2px; border-bottom:1px dashed rgba(255,255,255,.08);
+    margin-bottom:16px; gap:12px;
+  }
+  .panel h3{ margin:0; font-size:20px }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px }
+  .grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px }
+  .row{ display:flex; gap:10px; align-items:center }
+  .stack{ display:flex; flex-direction:column; gap:12px }
+  .section{ padding:14px; border:1px solid rgba(255,255,255,.12); border-radius:16px; background:rgba(255,255,255,.03) }
+
+  label{ font-size:13px; color:#cfd6ff; display:block; margin-bottom:6px }
+  input[type="range"]{ width:100% }
+  input[type="color"], input[type="file"], select, input[type="text"], input[type="url"], textarea{
+    width:100%; padding:10px 12px; border-radius:12px;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.06); color:#fff; outline:none;
+  }
+  textarea{ min-height:80px; resize:vertical }
+
+  .btn{
+    background: linear-gradient(135deg,#5b7cfa,#974dff);
+    color:#fff; border:none; border-radius:12px; padding:8px 14px; cursor:pointer;
+    box-shadow:var(--shadow);
+  }
+  .btn.secondary{ background:rgba(255,255,255,.07) }
+  .btn.red{ background: linear-gradient(135deg,#ff5b77,#ff3b3b) }
+
+  /* Widgets content */
+  .widgets-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px }
+  .widget{
+    border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:14px;
+    background: rgba(255,255,255,.05);
+  }
+  .widget h4{ margin:0 0 10px 0 }
+  .clock{
+    font-size:38px; letter-spacing:1px; font-weight:700;
+    text-shadow:0 0 14px rgba(105,240,255,.25);
+  }
+  .date{ color:#cfd6ff; font-size:13px }
+
+  .assistant{
+    display:flex; flex-direction:column; gap:10px; height:280px;
+  }
+  .chat{
+    flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px;
+    padding-right:6px;
+  }
+  .msg{ padding:10px 12px; border-radius:12px; max-width:78% }
+  .msg.you{ align-self:flex-end; background:rgba(91,124,250,.25) }
+  .msg.bot{ background:rgba(255,255,255,.08) }
+  .assistant .input-row{ display:flex; gap:8px }
+  .assistant input{ flex:1 }
+
+  .stock iframe{
+    width:100%; height:300px; border:0; border-radius:12px;
+    filter: saturate(1.05) contrast(1.05);
+  }
+
+  .updates ul{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px; max-height:300px; overflow:auto }
+  .updates a{ color:#cfe2ff; text-decoration:none }
+  .updates a:hover{ text-decoration:underline }
+
+  /* Collections */
+  .cat{
+    border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:10px 12px; margin-bottom:10px;
+    background:rgba(255,255,255,.04)
+  }
+  .cat-header{ display:flex; justify-content:space-between; align-items:center; cursor:pointer }
+  .cat-tools{ display:none; gap:10px; margin-top:10px; flex-wrap:wrap }
+  .badge{
+    display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:12px;
+    background:rgba(255,255,255,.07); color:#eaf1ff; text-decoration:none; border:1px solid rgba(255,255,255,.14)
+  }
+  .cat.open .cat-tools{ display:flex }
+
+  /* Small helpers */
+  .hidden{ display:none !important }
+  .right{ margin-left:auto }
+  .center-text{text-align:center}
+  .sm{ font-size:12px }
+  .hint{ color:#cfd6ffbd; font-size:12px }
+  .danger{ color:#ff8ea0 }
+
+  /* Responsive tweaks */
+  @media (max-width:680px){
+    .kbd-hint{ display:none }
+    .logo span{ display:none }
+    .corner{ min-width:auto; padding:10px 12px }
+    .shortcuts{ gap:12px }
+  }
+</style>
+</head>
+<body>
+<div id="bg-image"></div>
+<canvas id="codeRain"></canvas>
+<div id="neonLayer"></div>
+
+<div class="wrap" id="app">
+  <header>
+    <div class="logo">
+      <div class="mark"></div>
+      <span>DEV<span class="muted">.HOME</span></span>
+    </div>
+    <div class="top-actions">
+      <button id="btnSettings" class="icon-btn" title="Settings">
+        <i class="fa-solid fa-sliders"></i>
+      </button>
+      <button id="btnProfile" class="icon-btn" title="Profile">
+        <i class="fa-solid fa-user"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="center">
+    <form id="searchForm" class="search-wrap" autocomplete="off">
+      <i class="fa-solid fa-magnifying-glass" style="margin-left:10px"></i>
+      <input id="searchInput" type="text" placeholder="Search or enter URL" aria-label="Search" />
+      <button type="button" class="icon-btn mic-btn" id="micBtn" title="Voice search">
+        <i class="fa-solid fa-microphone"></i>
+      </button>
+      <div class="kbd-hint">Tip: Press / to focus</div>
+    </form>
+
+    <section class="shortcuts" id="shortcutGrid"></section>
+  </div>
+
+  <a id="btnWidgets" class="corner"><i class="fa-regular fa-square-check"></i> Widgets</a>
+  <a id="btnCollections" class="corner"><i class="fa-solid fa-folder-tree"></i> Collections</a>
+</div>
+
+<!-- Settings Panel -->
+<div class="overlay" id="settingsOverlay" aria-hidden="true">
+  <div class="panel">
+    <header>
+      <h3><i class="fa-solid fa-sliders"></i> Settings</h3>
+      <div class="right row">
+        <button class="btn secondary" id="btnReset">Reset</button>
+        <button class="btn" id="btnCloseSettings">Close</button>
+      </div>
+    </header>
+
+    <div class="grid-2">
+      <div class="section stack">
+        <h4>Shortcuts</h4>
+        <label for="shortcutSize">Tile size: <span id="shortcutSizeVal"></span></label>
+        <input id="shortcutSize" type="range" min="72" max="132" step="2">
+      </div>
+
+      <div class="section stack">
+        <h4>Animation</h4>
+        <div class="row">
+          <label><input type="radio" name="anim" value="none"> None</label>
+          <label><input type="radio" name="anim" value="code"> Code rain</label>
+          <label><input type="radio" name="anim" value="neon"> Neon lines</label>
+        </div>
+      </div>
+
+      <div class="section stack">
+        <h4>Background</h4>
+        <div class="grid-3">
+          <div>
+            <label>Gradient start</label>
+            <input id="bgStart" type="color" value="#040162">
+          </div>
+          <div>
+            <label>Gradient end</label>
+            <input id="bgEnd" type="color" value="#000000">
+          </div>
+          <div>
+            <label>Image overlay</label>
+            <input id="bgImageInput" type="file" accept="image/*">
+            <div class="hint">Optional. Adds subtle overlay.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section stack">
+        <h4>Glassmorphism</h4>
+        <div class="grid-3">
+          <div>
+            <label>Color</label>
+            <input id="glassColor" type="color" value="#ffffff">
+          </div>
+          <div>
+            <label>Transparency <span id="glassAlphaVal"></span></label>
+            <input id="glassAlpha" type="range" min="0.02" max="0.25" step="0.01" value="0.09">
+          </div>
+          <div>
+            <label>Blur <span id="glassBlurVal"></span></label>
+            <input id="glassBlur" type="range" min="6" max="28" step="1" value="14">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Widgets Panel -->
+<div class="overlay" id="widgetsOverlay" aria-hidden="true">
+  <div class="panel">
+    <header>
+      <h3><i class="fa-regular fa-square-check"></i> Widgets</h3>
+      <div class="right row">
+        <button class="btn" id="btnCloseWidgets">Close</button>
+      </div>
+    </header>
+
+    <div class="widgets-grid">
+      <div class="widget">
+        <h4><i class="fa-regular fa-clock"></i> Real-time Clock</h4>
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="date" id="dateStr"></div>
+      </div>
+
+      <div class="widget assistant">
+        <h4><i class="fa-solid fa-robot"></i> AI Assistant</h4>
+        <div class="chat" id="chat"></div>
+        <div class="input-row">
+          <input id="assistantInput" type="text" placeholder="Ask me to search, open, summarize..." />
+          <button class="btn" id="assistantSend">Send</button>
+        </div>
+        <div class="hint">Examples: "open github", "search webgpu news", "what's the time".</div>
+      </div>
+
+      <div class="widget stock">
+        <h4><i class="fa-solid fa-chart-line"></i> Real-time Stock Chart</h4>
+        <div class="row" style="margin-bottom:8px">
+          <input id="stockSymbol" type="text" value="AAPL" placeholder="Symbol e.g., AAPL, MSFT, TSLA" style="max-width:220px" />
+          <button class="btn" id="stockLoad">Load</button>
+        </div>
+        <iframe id="stockFrame" title="Stock Chart" allowtransparency="true"></iframe>
+        <div class="hint">Powered by TradingView embed. If blocked by a network policy, try another symbol.</div>
+      </div>
+
+      <div class="widget updates">
+        <h4><i class="fa-solid fa-fire"></i> New AI Updates</h4>
+        <ul id="updatesList"><li>Loading updates…</li></ul>
+        <div class="row" style="margin-top:8px">
+          <button class="btn secondary" id="refreshUpdates"><i class="fa-solid fa-rotate"></i> Refresh</button>
+          <span class="hint">From Hacker News (AI related stories).</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Collections Panel -->
+<div class="overlay" id="collectionsOverlay" aria-hidden="true">
+  <div class="panel">
+    <header>
+      <h3><i class="fa-solid fa-folder-tree"></i> Collections</h3>
+      <div class="right row">
+        <button class="btn" id="btnAddCategory"><i class="fa-solid fa-plus"></i> Add Category</button>
+        <button class="btn" id="btnCloseCollections">Close</button>
+      </div>
+    </header>
+
+    <div id="categories"></div>
+  </div>
+</div>
+
+<!-- Add Shortcut Modal -->
+<div class="overlay" id="addShortcutOverlay" aria-hidden="true">
+  <div class="panel" style="max-width:560px">
+    <header>
+      <h3><i class="fa-solid fa-plus"></i> Add Shortcut</h3>
+      <div class="right row">
+        <button class="btn" id="btnCloseAddShortcut">Close</button>
+      </div>
+    </header>
+    <div class="stack">
+      <div>
+        <label for="scLabel">Label</label>
+        <input id="scLabel" type="text" placeholder="e.g., Notion" />
+      </div>
+      <div>
+        <label for="scUrl">URL</label>
+        <input id="scUrl" type="url" placeholder="https://www.notion.so" />
+        <div class="hint">Icon will auto-use the site favicon. You can override with an emoji.</div>
+      </div>
+      <div>
+        <label for="scEmoji">Emoji icon (optional)</label>
+        <input id="scEmoji" type="text" placeholder="💡" />
+      </div>
+      <div class="row">
+        <button class="btn" id="btnSaveShortcut">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* -------------------- Utilities -------------------- */
+const $ = (sel, ctx=document) => ctx.querySelector(sel);
+const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+const ls = {
+  get(key, fallback){ try{ return JSON.parse(localStorage.getItem(key)) ?? fallback }catch{ return fallback }},
+  set(key, val){ localStorage.setItem(key, JSON.stringify(val)) }
+};
+const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+const toRGBA = (hex, alpha=1) => {
+  const v = hex.replace('#','');
+  const bigint = parseInt(v.length===3 ? v.split('').map(x=>x+x).join('') : v, 16);
+  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+const isProbablyUrl = (str) => /^(https?:\/\/|file:\/\/|chrome:\/\/|about:|edge:\/\/)/i.test(str) || /^[a-z0-9.-]+\.[a-z]{2,}([\/?#].*)?$/i.test(str);
+const normUrl = (x) => /^(https?:)?\/\//i.test(x) ? x : 'https://' + x;
+
+/* -------------------- Defaults -------------------- */
+const DEFAULT_SHORTCUTS = [
+  { label:'Google', url:'https://www.google.com', fa:'fa-brands fa-google', color:'#4285f4' },
+  { label:'YouTube', url:'https://www.youtube.com', fa:'fa-brands fa-youtube', color:'#ff3b30' },
+  { label:'GitHub', url:'https://github.com', fa:'fa-brands fa-github', color:'#ffffff' },
+  { label:'StackOverflow', url:'https://stackoverflow.com', fa:'fa-brands fa-stack-overflow', color:'#f48024' },
+  { label:'Reddit', url:'https://www.reddit.com', fa:'fa-brands fa-reddit-alien', color:'#ff4500' },
+  { label:'X', url:'https://x.com', fa:'fa-brands fa-x-twitter', color:'#eaeaea' },
+  { label:'ChatGPT', url:'https://chat.openai.com', fa:'fa-solid fa-robot', color:'#10a37f' }
+];
+const DEFAULT_COLLECTIONS = {
+  "AI Photo Editor":[
+    { name:'Adobe Firefly', url:'https://firefly.adobe.com' },
+    { name:'Remove.bg', url:'https://remove.bg' },
+    { name:'Runway', url:'https://runwayml.com' }
+  ],
+  "PDF Converter":[
+    { name:'iLovePDF', url:'https://www.ilovepdf.com' },
+    { name:'SmallPDF', url:'https://smallpdf.com' }
+  ],
+  "Coding Tools":[
+    { name:'CodePen', url:'https://codepen.io' },
+    { name:'StackBlitz', url:'https://stackblitz.com' },
+    { name:'JSFiddle', url:'https://jsfiddle.net' }
+  ],
+  "AI Assistants":[
+    { name:'ChatGPT', url:'https://chat.openai.com' },
+    { name:'Claude', url:'https://claude.ai' },
+    { name:'Perplexity', url:'https://www.perplexity.ai' }
+  ]
+};
+const DEFAULT_SETTINGS = {
+  shortcutSize: 92,
+  anim: 'code', // 'none' | 'code' | 'neon'
+  bgStart: '#040162',
+  bgEnd: '#000000',
+  bgImage: null, // dataURL
+  glassColor: '#ffffff',
+  glassAlpha: 0.09,
+  glassBlur: 14
+};
+
+/* -------------------- State -------------------- */
+let settings = ls.get('settings', DEFAULT_SETTINGS);
+let shortcuts = ls.get('shortcuts', DEFAULT_SHORTCUTS);
+let collections = ls.get('collections', DEFAULT_COLLECTIONS);
+
+/* -------------------- Apply Settings -------------------- */
+function applySettings() {
+  document.documentElement.style.setProperty('--shortcut-size', settings.shortcutSize + 'px');
+  document.documentElement.style.setProperty('--bg1', settings.bgStart);
+  document.documentElement.style.setProperty('--bg2', settings.bgEnd);
+  document.getElementById('bg-image').style.backgroundImage = settings.bgImage ? `url(${settings.bgImage})` : 'none';
+
+  document.documentElement.style.setProperty('--glass-alpha', settings.glassAlpha);
+  document.documentElement.style.setProperty('--glass-blur', settings.glassBlur + 'px');
+  document.documentElement.style.setProperty('--glass-border', 'rgba(255,255,255,' + clamp(settings.glassAlpha+0.08, .12, .28) + ')');
+
+  const rgba = toRGBA(settings.glassColor, settings.glassAlpha);
+  document.querySelectorAll('.icon-btn,.search-wrap,.tile,.corner,.panel,.widget,.section')
+    .forEach(el => el.style.background = rgba);
+
+  // Set inputs in UI
+  $('#shortcutSize').value = settings.shortcutSize;
+  $('#shortcutSizeVal').textContent = settings.shortcutSize + 'px';
+  $$('input[name="anim"]').forEach(r => r.checked = (r.value===settings.anim));
+  $('#bgStart').value = settings.bgStart;
+  $('#bgEnd').value = settings.bgEnd;
+  $('#glassColor').value = settings.glassColor;
+  $('#glassAlpha').value = settings.glassAlpha;
+  $('#glassBlur').value = settings.glassBlur;
+  $('#glassAlphaVal').textContent = settings.glassAlpha.toFixed(2);
+  $('#glassBlurVal').textContent = settings.glassBlur + 'px';
+
+  toggleAnimations(settings.anim);
+}
+
+/* -------------------- Shortcuts -------------------- */
+const grid = $('#shortcutGrid');
+function faviconUrl(siteUrl){
+  try{
+    const url = new URL(normUrl(siteUrl));
+    return `https://www.google.com/s2/favicons?sz=64&domain=${url.hostname}`;
+  }catch{ return '' }
+}
+function renderShortcuts(){
+  grid.innerHTML = '';
+  shortcuts.forEach((sc, idx) => {
+    const a = document.createElement('a');
+    a.className='tile';
+    a.href = sc.url; a.target='_blank'; a.rel='noopener noreferrer';
+    a.title = sc.label + ' — ' + sc.url;
+    a.dataset.index = idx;
+
+    const icon = document.createElement('div');
+    icon.className='icon';
+    if (sc.emoji) {
+      icon.textContent = sc.emoji;
+      icon.style.fontSize='24px';
+    } else if (sc.fa) {
+      const i = document.createElement('i');
+      i.className = sc.fa;
+      i.style.color = sc.color || '#fff';
+      icon.appendChild(i);
+    } else {
+      const img = document.createElement('img');
+      img.src = faviconUrl(sc.url);
+      img.alt = 'icon';
+      icon.appendChild(img);
+    }
+
+    const label = document.createElement('div');
+    label.className='label';
+    label.textContent=sc.label;
+
+    a.appendChild(icon);
+    a.appendChild(label);
+    a.addEventListener('click', e => {
+      // ripple
+      const r = document.createElement('span');
+      r.className='ripple';
+      r.style.left = (e.offsetX || 0) + 'px';
+      r.style.top  = (e.offsetY || 0) + 'px';
+      a.appendChild(r);
+      setTimeout(()=>r.remove(), 650);
+    });
+    grid.appendChild(a);
+  });
+
+  // Add button
+  const add = document.createElement('button');
+  add.type='button';
+  add.className='tile add';
+  add.innerHTML = `<div class="icon"><i class="fa-solid fa-plus"></i></div><div class="label">Add</div>`;
+  add.onclick = ()=> openModal('#addShortcutOverlay');
+  grid.appendChild(add);
+}
+renderShortcuts();
+
+/* -------------------- Search -------------------- */
+const SEARCH_ENGINE = 'https://www.google.com/search?q='; // change if desired
+$('#searchForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const q = $('#searchInput').value.trim();
+  if (!q) return;
+  if (isProbablyUrl(q)) {
+    window.location.href = normUrl(q);
+  } else {
+    window.location.href = SEARCH_ENGINE + encodeURIComponent(q);
+  }
+});
+document.addEventListener('keydown', e=>{
+  if (e.key === '/' && document.activeElement !== $('#searchInput')) {
+    e.preventDefault(); $('#searchInput').focus();
+  }
+});
+
+/* Voice search (if supported) */
+(function setupVoice(){
+  const btn = $('#micBtn');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){ btn.title='Voice not supported in this browser'; btn.style.opacity=.6; return; }
+  const rec = new SR(); rec.lang='en-US'; rec.interimResults=false;
+  let active=false;
+
+  rec.onstart = ()=>{ active=true; btn.style.background=toRGBA('#69f0ff', .2); $('#searchInput').placeholder='Listening…' }
+  rec.onend   = ()=>{ active=false; btn.style.background=''; $('#searchInput').placeholder='Search or enter URL' }
+  rec.onresult= (e)=>{ const t = e.results[0][0].transcript; $('#searchInput').value = t; $('#searchForm').dispatchEvent(new Event('submit')); }
+
+  btn.onclick=()=> active? rec.stop() : rec.start();
+})();
+
+/* -------------------- Settings Panel -------------------- */
+function openModal(sel){ $(sel).classList.add('show'); }
+function closeModal(sel){ $(sel).classList.remove('show'); }
+$('#btnSettings').onclick = ()=> openModal('#settingsOverlay');
+$('#btnCloseSettings').onclick = ()=> closeModal('#settingsOverlay');
+
+$('#shortcutSize').addEventListener('input', e=>{
+  settings.shortcutSize = +e.target.value; ls.set('settings', settings); applySettings();
+});
+$$('input[name="anim"]').forEach(r=> r.addEventListener('change', e=>{
+  settings.anim = e.target.value; ls.set('settings', settings); applySettings();
+}));
+$('#bgStart').addEventListener('input', e=>{
+  settings.bgStart = e.target.value; ls.set('settings', settings); applySettings();
+});
+$('#bgEnd').addEventListener('input', e=>{
+  settings.bgEnd = e.target.value; ls.set('settings', settings); applySettings();
+});
+$('#bgImageInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { settings.bgImage = reader.result; ls.set('settings', settings); applySettings(); };
+  reader.readAsDataURL(file);
+});
+$('#glassColor').addEventListener('input', e=>{
+  settings.glassColor = e.target.value; ls.set('settings', settings); applySettings();
+});
+$('#glassAlpha').addEventListener('input', e=>{
+  settings.glassAlpha = +e.target.value; $('#glassAlphaVal').textContent = settings.glassAlpha.toFixed(2);
+  ls.set('settings', settings); applySettings();
+});
+$('#glassBlur').addEventListener('input', e=>{
+  settings.glassBlur = +e.target.value; $('#glassBlurVal').textContent = settings.glassBlur + 'px';
+  ls.set('settings', settings); applySettings();
+});
+
+$('#btnReset').onclick = ()=>{
+  if (!confirm('Reset all settings to defaults?')) return;
+  settings = {...DEFAULT_SETTINGS};
+  ls.set('settings', settings);
+  applySettings();
+};
+applySettings();
+
+/* -------------------- Add Shortcut Modal -------------------- */
+$('#btnCloseAddShortcut').onclick = ()=> closeModal('#addShortcutOverlay');
+$('#btnSaveShortcut').onclick = ()=>{
+  const label = $('#scLabel').value.trim();
+  const url = $('#scUrl').value.trim();
+  const emoji = $('#scEmoji').value.trim();
+  if (!label || !url) return alert('Please enter label and URL.');
+  const sc = { label, url: normUrl(url) };
+  if (emoji) sc.emoji = emoji;
+  else sc.fa = null; // will use favicon
+  shortcuts.push(sc);
+  ls.set('shortcuts', shortcuts);
+  renderShortcuts();
+  closeModal('#addShortcutOverlay');
+  $('#scLabel').value=''; $('#scUrl').value=''; $('#scEmoji').value='';
+};
+
+/* -------------------- Widgets Panel -------------------- */
+$('#btnWidgets').onclick = ()=> openModal('#widgetsOverlay');
+$('#btnCloseWidgets').onclick = ()=> closeModal('#widgetsOverlay');
+
+/* Clock */
+function updateClock(){
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const t = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const d = now.toLocaleDateString(undefined, {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  $('#clock').textContent = t;
+  $('#dateStr').textContent = d;
+}
+setInterval(updateClock, 1000); updateClock();
+
+/* Assistant (simple, local helper) */
+const chat = $('#chat');
+function addMsg(text, who='bot'){
+  const div = document.createElement('div');
+  div.className='msg ' + (who==='you' ? 'you':'bot');
+  div.textContent=text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+addMsg('Hey! I can open sites, search the web, and answer simple questions. Try “open github” or “search nextjs server actions”.');
+
+function assistantHandle(input){
+  const q = input.trim();
+  if (!q) return;
+
+  // Simple intent routing
+  const mOpen = q.match(/^(open|go to|launch)\s+(.+)/i);
+  const mSearch = q.match(/^(search|find|look up)\s+(.+)/i);
+  if (mOpen){
+    const site = mOpen[2].replace(/^(the|a)\s+/i,'');
+    const guess = site.includes('.') ? site : (site+'.com');
+    window.open(normUrl(guess), '_blank','noopener');
+    addMsg('Opening ' + guess + ' …');
+    return;
+  }
+  if (mSearch){
+    const term = mSearch[2];
+    window.open(SEARCH_ENGINE + encodeURIComponent(term), '_blank','noopener');
+    addMsg('Searching for "' + term + '" …');
+    return;
+  }
+  if (/time|clock/i.test(q)){
+    addMsg('It is ' + new Date().toLocaleTimeString());
+    return;
+  }
+  if (/date|day/i.test(q)){
+    addMsg('Today is ' + new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}));
+    return;
+  }
+
+  // Try a quick Wikipedia summary
+  addMsg('Let me check…');
+  const term = encodeURIComponent(q);
+  fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${term}`)
+    .then(r=>r.ok?r.json():Promise.reject())
+    .then(j=>{
+      if (j.extract){ addMsg(j.title + ': ' + j.extract) }
+      else { addMsg('No summary found. I can search it for you.'); window.open(SEARCH_ENGINE + term, '_blank','noopener'); }
+    })
+    .catch(()=>{ addMsg('Couldn’t fetch a summary. Opening a web search.'); window.open(SEARCH_ENGINE + term, '_blank','noopener'); });
+}
+$('#assistantSend').onclick = ()=>{
+  const val = $('#assistantInput').value;
+  if (!val.trim()) return;
+  addMsg(val, 'you'); $('#assistantInput').value='';
+  assistantHandle(val);
+};
+$('#assistantInput').addEventListener('keydown', e=>{
+  if (e.key==='Enter'){
+    e.preventDefault(); $('#assistantSend').click();
+  }
+});
+
+/* Stock chart (TradingView embed) */
+function loadStock(sym){
+  sym = (sym||'AAPL').toUpperCase().trim();
+  const src = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(sym)}&interval=D&hidesidetoolbar=1&symboledit=1&saveimage=0&hideideas=1&theme=dark&style=1&timezone=Etc/UTC&studies=[]&widgetbar_width=0`;
+  $('#stockFrame').src = src;
+}
+$('#stockLoad').onclick = ()=> loadStock($('#stockSymbol').value);
+loadStock('AAPL');
+
+/* AI updates (Hacker News Algolia) */
+async function loadUpdates(){
+  const list = $('#updatesList');
+  list.innerHTML = '<li>Loading…</li>';
+  try{
+    const res = await fetch('https://hn.algolia.com/api/v1/search?query=ai&tags=story&hitsPerPage=12');
+    const data = await res.json();
+    list.innerHTML = '';
+    data.hits.forEach(h=>{
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = h.url || ('https://news.ycombinator.com/item?id=' + h.objectID);
+      a.target='_blank'; a.rel='noopener';
+      a.textContent = h.title + ' — ' + (h.author||'');
+      li.appendChild(a); list.appendChild(li);
+    });
+  }catch(e){
+    list.innerHTML = '<li class="danger">Failed to fetch updates.</li>';
+  }
+}
+$('#refreshUpdates').onclick = loadUpdates;
+loadUpdates();
+
+/* -------------------- Collections -------------------- */
+const catsEl = $('#categories');
+function renderCollections(){
+  catsEl.innerHTML='';
+  Object.keys(collections).forEach(name=>{
+    const cat = document.createElement('div'); cat.className='cat';
+    const header = document.createElement('div'); header.className='cat-header';
+    header.innerHTML = `<strong>${name}</strong>
+      <div class="row">
+        <button class="btn secondary btnAddTool"><i class="fa-solid fa-plus"></i> Add Tool</button>
+        <button class="btn secondary btnToggle"><i class="fa-solid fa-chevron-down"></i></button>
+      </div>`;
+    const tools = document.createElement('div'); tools.className='cat-tools';
+    (collections[name]||[]).forEach(t=>{
+      const a = document.createElement('a'); a.className='badge'; a.href=t.url; a.target='_blank';
+      a.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> ${t.name}`;
+      tools.appendChild(a);
+    });
+    cat.appendChild(header); cat.appendChild(tools);
+    header.querySelector('.btnToggle').onclick = ()=> cat.classList.toggle('open');
+    header.querySelector('.btnAddTool').onclick = ()=>{
+      const toolName = prompt('Tool name:');
+      if (!toolName) return;
+      const url = prompt('Tool URL (include https://):');
+      if (!url) return;
+      collections[name] = collections[name] || [];
+      collections[name].push({name:toolName, url:normUrl(url)});
+      ls.set('collections', collections); renderCollections();
+    };
+    catsEl.appendChild(cat);
+  });
+}
+renderCollections();
+
+$('#btnCollections').onclick = ()=> openModal('#collectionsOverlay');
+$('#btnCloseCollections').onclick = ()=> closeModal('#collectionsOverlay');
+$('#btnAddCategory').onclick = ()=>{
+  const name = prompt('New category name:');
+  if (!name) return;
+  if (collections[name]){ alert('Category already exists.'); return; }
+  collections[name] = [];
+  ls.set('collections', collections);
+  renderCollections();
+};
+
+/* -------------------- Profile Button (simple) -------------------- */
+$('#btnProfile').onclick = ()=>{
+  const current = ls.get('profileName', 'Guest');
+  const name = prompt('Profile name', current);
+  if (name!==null){ ls.set('profileName', name); alert('Hi, ' + name + '!'); }
+};
+
+/* -------------------- Animations -------------------- */
+let codeInterval = null;
+function startCodeRain(){
+  const canvas = $('#codeRain'), ctx = canvas.getContext('2d');
+  function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+  resize(); addEventListener('resize', resize);
+  const fontSize = 16;
+  const columns = Math.floor(canvas.width / fontSize);
+  const drops = new Array(columns).fill(0).map(()=>Math.random()*canvas.height/fontSize);
+
+  function draw(){
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+
+    ctx.fillStyle = '#55f0ff';
+    ctx.font = fontSize + 'px monospace';
+    for (let i=0; i<drops.length; i++){
+      const chars = '01{}[]<>/|\\=+*-;:';
+      const text = chars.charAt(Math.floor(Math.random()*chars.length));
+      ctx.fillText(text, i*fontSize, drops[i]*fontSize);
+      if (drops[i]*fontSize > canvas.height && Math.random() > 0.975) drops[i]=0;
+      drops[i]++;
+    }
+  }
+  if (codeInterval) clearInterval(codeInterval);
+  codeInterval = setInterval(draw, 50);
+  canvas.style.display='block';
+}
+function stopCodeRain(){
+  const canvas = $('#codeRain');
+  canvas.style.display='none';
+  if (codeInterval) clearInterval(codeInterval);
+}
+function startNeon(){
+  const layer = $('#neonLayer');
+  layer.innerHTML=''; layer.style.display='block';
+  const h = innerHeight;
+  for (let i=0;i<14;i++){
+    const line = document.createElement('div');
+    line.className='neon-line';
+    const top = Math.random()*h;
+    line.style.top = top+'px';
+    line.style.animationDuration = (4.8 + Math.random()*3) + 's';
+    line.style.opacity = (0.35 + Math.random()*0.5);
+    layer.appendChild(line);
+  }
+}
+function stopNeon(){
+  const layer = $('#neonLayer');
+  layer.innerHTML=''; layer.style.display='none';
+}
+
+function toggleAnimations(mode){
+  if (mode==='code'){ startNeon(); startCodeRain(); } // can combine lightly
+  if (mode==='neon'){ stopCodeRain(); startNeon(); }
+  if (mode==='none'){ stopCodeRain(); stopNeon(); }
+}
+
+/* -------------------- Nice pointer glow on tiles -------------------- */
+function glowFollow(e){
+  const x = e.offsetX, y = e.offsetY;
+  e.currentTarget.style.background =
+    `radial-gradient(240px circle at ${x}px ${y}px, rgba(105,240,255,.18), transparent 40%),
+     ${toRGBA(settings.glassColor, settings.glassAlpha)}`;
+}
+function glowLeave(e){
+  e.currentTarget.style.background = toRGBA(settings.glassColor, settings.glassAlpha);
+}
+['.tile','.icon-btn','.corner'].forEach(sel=>{
+  grid.addEventListener('pointermove', (ev)=>{ const t = ev.target.closest(sel); if (t) glowFollow({...ev, currentTarget:t}) });
+  grid.addEventListener('pointerleave', (ev)=>{ const t = ev.target.closest(sel); if (t) glowLeave({currentTarget:t}) });
+});
+$$('.icon-btn,.corner').forEach(el=>{
+  el.addEventListener('pointermove', glowFollow);
+  el.addEventListener('pointerleave', glowLeave);
+});
+
+/* Initialize animation mode after all loads */
+toggleAnimations(settings.anim);
+</script>
+</body>
+  </html>
